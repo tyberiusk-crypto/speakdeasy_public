@@ -13,6 +13,13 @@
   try{
     const html=sessionStorage.getItem('sd_unlocked_html');
     if(html&&html.length>1000){
+      // Hide the page immediately so the unlock screen never flashes
+      // This runs before <style> or <body> are parsed — before anything is visible
+      const s=document.createElement('style');
+      s.textContent='*{visibility:hidden!important;opacity:0!important}';
+      document.head.appendChild(s);
+      // Small rAF delay lets the hide style paint before we write the new doc
+      // On fast browsers document.open fires before next frame anyway
       document.open('text/html','replace');
       document.write(html);
       document.close();
@@ -67,7 +74,12 @@ async function encryptLocal(plain,key){const iv=crypto.getRandomValues(new Uint8
 async function decryptLocal(stored,key){const[ivB64,ctB64]=stored.split('.');const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64ToBytes(ivB64)},key,b64ToBytes(ctB64));return new TextDecoder().decode(plain);}
 
 function launchApp(html){
-  try{sessionStorage.setItem('sd_unlocked_html',html);window.location.reload();}
+  try{
+    sessionStorage.setItem('sd_unlocked_html',html);
+    // Hide everything immediately so the unlock screen doesn't show during reload
+    document.body.style.cssText='visibility:hidden;opacity:0;transition:none';
+    window.location.reload();
+  }
   catch(e){document.open('text/html','replace');document.write(html);document.close();}
 }
 
