@@ -129,18 +129,20 @@ async function checkCache(){
   try{
     const cached = localStorage.getItem(CACHE_KEY);
     const ver    = localStorage.getItem(CACHE_VER);
-    if(!cached || ver !== APP_VERSION) return;   // version mismatch — re-decrypt
+    if(!cached || ver !== APP_VERSION) return;
     const key  = await deviceKey();
     const html = await decryptLocal(cached, key);
     if(html && html.includes('SpeakDeasy')){
-      // Show the offline badge so the user knows it works offline
       document.getElementById('offlineBadge').classList.add('show');
-      // Auto-launch after a short moment so user sees the screen
-      // This gives time for the home screen icon launch to feel native
-      setTimeout(()=> launchApp(html), IS_STANDALONE ? 100 : 800);
+      // Show a brief loading state so the user sees feedback
+      const btn = document.getElementById('unlockBtn');
+      btn.textContent = 'Loading…';
+      btn.disabled = true;
+      document.getElementById('progWrap').style.display = 'block';
+      // Short pause so the offline badge is visible before we navigate away
+      setTimeout(()=> launchApp(html), IS_STANDALONE ? 150 : 900);
     }
   }catch(e){
-    // Cache corrupt — clear it and require password
     localStorage.removeItem(CACHE_KEY);
     localStorage.removeItem(CACHE_VER);
   }
@@ -199,9 +201,31 @@ async function doUnlock(){
 }
 
 function launchApp(html){
-  document.open();
-  document.write(html);
-  document.close();
+  // document.write() breaks speechSynthesis and SVG icons on iOS/Android.
+  // Instead, create a Blob URL from the decrypted HTML and navigate to it.
+  // This gives the app a completely clean browsing context — identical to
+  // opening the original file directly from a web server.
+  try{
+    const blob = new Blob([html], {type:'text/html;charset=utf-8'});
+    const url  = URL.createObjectURL(blob);
+    // Navigate the current window to the blob URL
+    // The blob URL persists for the life of the page session
+    window.location.href = url;
+  }catch(e){
+    // Blob URL failed (some strict CSP environments) — fall back to srcdoc iframe
+    _launchIframe(html);
+  }
+}
+
+function _launchIframe(html){
+  // Full-page iframe with srcdoc — still gives a clean context for scripts
+  document.body.innerHTML = '';
+  document.body.style.cssText = 'margin:0;padding:0;height:100vh;overflow:hidden';
+  const frame = document.createElement('iframe');
+  frame.style.cssText = 'width:100%;height:100%;border:none;display:block';
+  frame.setAttribute('allow', 'microphone; camera; autoplay; fullscreen');
+  frame.srcdoc = html;
+  document.body.appendChild(frame);
 }
 
 function showErr(msg){ document.getElementById('errMsg').textContent=msg; }
